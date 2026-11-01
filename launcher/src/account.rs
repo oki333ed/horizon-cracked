@@ -26,6 +26,11 @@ pub const NOT_CONFIGURED: &str = "This build of the launcher has no Microsoft si
 /// What every Play says while no account in the launcher owns the game.
 pub const NEEDS_OWNER: &str =
     "Sign in with a Microsoft account that owns Minecraft: Java Edition to play";
+/// Whether Play, offline names and Horizon's own download need a signed-in Microsoft account that
+/// owns Minecraft: Java Edition. Off in this build: Play starts the game with the game's own name
+/// or the selected offline name, and Horizon downloads the pinned version from Mojang for anyone.
+/// Sign-in still works, and a signed-in account still gets its session for online-mode servers.
+pub const OWNER_GATE: bool = false;
 const DOES_NOT_OWN: &str = "This account doesn't own Minecraft: Java Edition.";
 const NO_PROFILE: &str =
     "This account has no Minecraft profile yet. Create one at minecraft.net, then sign in again.";
@@ -1213,7 +1218,7 @@ impl Accounts {
                 self.selected = Some(uuid);
             }
             Player::Offline(name) => {
-                if !offline_without_owner && !self.has_owner(store) {
+                if OWNER_GATE && !offline_without_owner && !self.has_owner(store) {
                     return Err(OFFLINE_NEEDS_OWNER.into());
                 }
                 let name = self.add_offline(&name)?;
@@ -1410,7 +1415,7 @@ pub fn launch(
             }
         }
     }
-    if owned {
+    if !OWNER_GATE || owned {
         Ok(pass)
     } else {
         Err(NoOwner)
@@ -1419,7 +1424,8 @@ pub fn launch(
 
 /// The owner gate before the game starts. With the window's hidden developer option
 /// (`backend::Settings::dev_offline`, `offline_without_owner`) no owner is no refusal: the game
-/// starts offline, without a session and without an `owner`. Downloads never come through here:
+/// starts offline, without a session and without an `owner`. With [`OWNER_GATE`] off (this build)
+/// no owner is no refusal either. Downloads never come through here:
 /// `backend::download_for_owner` asks [`launch`] itself, so the option never downloads the game.
 pub fn launch_for_game(
     ep: &Endpoints,
@@ -1429,7 +1435,7 @@ pub fn launch_for_game(
     offline_without_owner: bool,
 ) -> Result<Launch, NoOwner> {
     match launch(ep, client_id, store, accounts) {
-        Err(NoOwner) if offline_without_owner => Ok(Launch::default()),
+        Err(NoOwner) if !OWNER_GATE || offline_without_owner => Ok(Launch::default()),
         pass => pass,
     }
 }
